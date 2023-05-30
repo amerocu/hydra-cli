@@ -1,6 +1,5 @@
 use crate::hydra::client::*;
 
-use reqwest::StatusCode;
 use reqwest::blocking::Client as ReqwestClient;
 use reqwest::header::REFERER;
 use serde::de::DeserializeOwned;
@@ -268,7 +267,7 @@ mod tests {
 
         assert_eq!(
             res,
-            Err(ClientError::Error("500 Internal Server Error".to_string()))
+            Err(ClientError::Error("Response Error: 500 Internal Server Error".to_string()))
         );
     }
 

@@ -1,34 +1,38 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-22.11";
-    crate2nix = {
-      url = "github:kolloch/crate2nix";
-      flake = false;
-    };
     flakeu.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, crate2nix, flakeu }:
+  outputs = { self, nixpkgs, flakeu }: let
+    overlay = final: prev: with final.pkgs.lib; {
+      hydra-cli = prev.hydra-cli.overrideAttrs(oa: {
+        version = (importTOML ./Cargo.toml).package.version + "-" + self.shortRev or "unstable";
+        src = self;
+        cargoDeps = final.pkgs.rustPlatform.importCargoLock {
+          lockFile = ./Cargo.lock;
+        };
+        postPatch = ''
+          ln -sf ${./Cargo.lock} Cargo.lock
+        '';
+      });
+    };
+    in
+
     flakeu.lib.eachSystem [flakeu.lib.system.x86_64-linux] (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-        crateName = "hydra-cli";
-
-        inherit (import "${crate2nix}/tools.nix" { inherit pkgs; })
-          generatedCargoNix;
-
-        project = pkgs.callPackage (generatedCargoNix {
-          name = crateName;
-          src = ./.;
-        }) {
-          defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-            # Crate dependency overrides go here
-          };
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [
+            overlay
+          ];
         };
 
+        crateName = "hydra-cli";
+
       in {
-        packages = rec {
-          hydra-cli = project.rootCrate.build;
+        packages = with pkgs; {
+          inherit hydra-cli;
           default = hydra-cli;
         };
 
@@ -53,6 +57,8 @@
         checks = {
           vm = pkgs.callPackage ./tests/vm.nix { hydra-cli = self.packages.${system}.${crateName}; };
         };
-      });
+      }) // {
+        overlays.default = overlay;
+      };
 }
 
